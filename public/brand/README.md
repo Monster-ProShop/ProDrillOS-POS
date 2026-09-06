@@ -1,1 +1,1 @@
-Place the official ProDrillOS logo here, then set NEXT_PUBLIC_BRAND_LOGO=/brand/your-logo.svg in .env. No official logo or verified palette was available during scaffolding. Replace the provisional CSS tokens in src/app/globals.css with the official colors.
+Official ProDrillOS logo copied from the image rendered at https://prodrillos.com/ on 2026-09-06. Source: https://fbcovchdphwngjcyfxgs.supabase.co/storage/v1/object/public/TempImgsProDrillOS/ProDrillOSLOGO.png . NEXT_PUBLIC_BRAND_LOGO can override this asset. Brand colors are in src/app/globals.css.

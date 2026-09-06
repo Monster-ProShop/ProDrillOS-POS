@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
-/* Provisional palette. Replace these tokens with official ProDrillOS brand values. */
+/* Brand colors verified against ProDrillOS.com on 2026-09-06. */
 :root {
-  --brand: #b5f36b;
-  --brand-ink: #182411;
-  --canvas: #101612;
-  --surface: #1a231d;
-  --border: #344438;
-  --text: #f0f4ed;
-  --muted: #b5c3b8;
+  --brand: #38bdf8;
+  --brand-ink: #0b0f19;
+  --canvas: #0b0f19;
+  --surface: #1e293b;
+  --border: #374151;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
 }
 @theme inline {
   --color-brand: var(--brand);

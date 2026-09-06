@@ -86,10 +86,10 @@ Cashiers should confirm the server-returned total and payment status before rele
 
 ## ProDrillOS branding
 
-The official website could not be retrieved, and no existing brand files were present. The text wordmark and lime/dark-green palette are **provisional**, not a claimed match to ProDrillOS.com.
+The branding was verified visually and through rendered styles on [ProDrillOS.com](https://prodrillos.com/) on September 6, 2026. The original cube logo is included in public/brand/prodrillos-logo.png. The starter uses the official cyan (#38bdf8), navy background (#0b0f19), and gray text (#e5e7eb), with complementary dark surfaces. Body typography remains a readable system font for dense POS tables.
 
-- Put the official logo in public/brand/ and set NEXT_PUBLIC_BRAND_LOGO.
-- Replace --brand, --brand-ink, --canvas, --surface, --border, --text, and --muted in src/app/globals.css with the official palette.
+- NEXT_PUBLIC_BRAND_LOGO defaults to the included official logo; change it when replacing the brand asset.
+- Brand tokens live in src/app/globals.css: --brand, --brand-ink, --canvas, --surface, --border, --text, and --muted.
 - Configure SHOP_CURRENCY and NEXT_PUBLIC_SHOP_CURRENCY consistently before the first sale. This starter assumes a single shop and a two-decimal currency (USD, MXN, CAD, EUR, GBP).
 
 ## File structure
