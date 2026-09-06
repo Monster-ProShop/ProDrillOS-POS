@@ -1,0 +1,1 @@
+Place the official ProDrillOS logo here, then set NEXT_PUBLIC_BRAND_LOGO=/brand/your-logo.svg in .env. No official logo or verified palette was available during scaffolding. Replace the provisional CSS tokens in src/app/globals.css with the official colors.

@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProductCategory {
+  REACTIVE_RESIN
+  URETHANE
+  GRIPS
+  TAPE
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  STRIPE
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETE
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  IMPORTED
+}
+
+// All monetary values are integer minor units (cents), never floating point.
+model Product {
+  id                  String          @id @default(uuid()) @db.Uuid
+  name                String          @db.VarChar(200)
+  sku                 String          @unique @db.VarChar(80)
+  category            ProductCategory
+  price               Int
+  cost                Int
+  stock_quantity      Int             @default(0)
+  low_stock_threshold Int             @default(3)
+  active              Boolean         @default(true)
+  version             Int             @default(0)
+  items               TransactionItem[]
+}
+
+model Transaction {
+  id                String            @id @default(uuid()) @db.Uuid
+  timestamp         DateTime          @default(now()) @db.Timestamptz(3)
+  completed_at      DateTime?         @db.Timestamptz(3)
+  total_amount      Int
+  currency          String            @db.VarChar(3)
+  payment_method    PaymentMethod
+  status            TransactionStatus @default(PENDING)
+  idempotency_key   String            @unique @db.Uuid
+  request_hash      String
+  stripe_session_id String?           @unique
+  payment_url       String?
+  expires_at        DateTime?         @db.Timestamptz(3)
+  items             TransactionItem[]
+
+  @@index([status, completed_at, payment_method])
+}
+
+model TransactionItem {
+  id             String      @id @default(uuid()) @db.Uuid
+  transaction_id String      @db.Uuid
+  product_id     String      @db.Uuid
+  quantity       Int
+  price_at_sale  Int
+  name_at_sale   String
+  transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Restrict)
+  product        Product     @relation(fields: [product_id], references: [id], onDelete: Restrict)
+
+  @@unique([transaction_id, product_id])
+  @@index([product_id])
+}
+
+model InvoiceLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  upload_date    DateTime      @default(now()) @db.Timestamptz(3)
+  vendor         String        @db.VarChar(100)
+  invoice_number String        @db.VarChar(100)
+  status         InvoiceStatus @default(IMPORTED)
+  content_hash   String
+  rows_imported  Int
+
+  @@unique([vendor, invoice_number])
+  @@unique([vendor, content_hash])
+}
