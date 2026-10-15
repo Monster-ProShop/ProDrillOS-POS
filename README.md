@@ -1,157 +1,63 @@
 # ProDrillOS POS
 
-```powershell
-# Git initialization and remote setup (already done in this workspace).
-git init
-git remote add origin https://github.com/Monster-ProShop/ProDrillOS-POS.git
-# If origin already exists, inspect it with git remote -v instead of adding it again.
+Next.js App Router + TypeScript, Tailwind, shadcn-style Radix components and Lucide. Neon PostgreSQL provides one inventory ledger for the staff POS and public storefront. Deployment targets Cloudflare Workers at **pos.prodrillos.com**. Currency is **MXN**.
 
-# For a fresh clone of this generated starter:
-git clone https://github.com/Monster-ProShop/ProDrillOS-POS.git
-cd ProDrillOS-POS
-npm install
-Copy-Item .env.example .env
-# Edit .env: database URL, a strong staff password, Stripe test keys, currency, and timezone.
-docker compose up -d
-npx prisma generate
-npx prisma migrate deploy
-npm run dev
+## Start locally
 
-# Publish local changes after reviewing them:
-git add .
-git commit -m "Build ProDrillOS POS starter"
-git push -u origin HEAD
-
-# To generate an empty equivalent framework project elsewhere:
-npx create-next-app@latest prodrillos-pos --ts --tailwind --app --src-dir --import-alias "@/*" --use-npm
-cd prodrillos-pos
-npm install @prisma/client@7 @prisma/adapter-pg@7 pg stripe@20 csv-parse@6 zod@4 qrcode.react dotenv
-npm install -D prisma@7 @types/pg tsx
-npx prisma init --datasource-provider postgresql
-# Then copy this repository's schema, migration, configuration, and src files.
-```
-
-Use Node.js 22.12+ or 24 LTS. This repository includes a pnpm lockfile; for reproducible installation use pnpm 11.19.0 and `pnpm install --frozen-lockfile`. npm commands are provided because they are widely available; npm install resolves the package.json ranges independently. The PostgreSQL container credentials are for local development only.
-
-The repository is private: [Monster-ProShop/ProDrillOS-POS](https://github.com/Monster-ProShop/ProDrillOS-POS). No database, Stripe account, or production deployment is created by this starter.
-
-## Database schema
-
-The complete schema is in [prisma/schema.prisma](prisma/schema.prisma); the generated migration plus PostgreSQL CHECK constraints is in [prisma/migrations/20260906000000_init/migration.sql](prisma/migrations/20260906000000_init/migration.sql). Apply the migration with `prisma migrate deploy`, not `db push`, to retain the custom constraints.
-
-- **Product**: requested fields, unique normalized SKU, category enum, plus active flag and optimistic version. Prices and costs are integer cents: 19999 means 199.99 in the configured currency. Archive is the delete operation so historic sale lines retain their product relationship.
-- **Transaction**: requested fields plus currency, payment completion date, idempotency key and request hash, Stripe session ID/URL, and reservation expiry.
-- **TransactionItem**: required product and transaction foreign keys with RESTRICT deletion; positive quantity, price snapshot, name snapshot, and unique transaction/product pair.
-- **InvoiceLog**: requested fields plus invoice number, canonical content hash, and imported SKU count. Unique vendor/invoice and vendor/content pairs prevent accidental double receiving. Only successful imports are logged; invalid imports return an error and roll back completely.
-
-`PENDING → COMPLETE` and `PENDING → EXPIRED` are terminal payment transitions in application code. Cash transactions complete immediately. The database rejects negative money/stock and invalid quantities; the checkout service computes the total from server-owned prices in the same transaction as the sale lines.
-
-## Five core modules
-
-1. **Inventory dashboard** — [UI](src/app/inventory/page.tsx), [API](src/app/api/products/route.ts). GET, POST, PATCH, DELETE at /api/products. Form validation, low-stock indicators, search, and archive. PATCH/DELETE require the version the cashier read; inventory changes increment it so a stale edit cannot overwrite receiving or checkout.
-2. **Invoice importer** — [UI](src/app/invoices/page.tsx), [API](src/app/api/invoices/route.ts), [parser](src/lib/invoices.ts). Multipart POST includes file, vendor, invoice_number. Accepts sku,quantity CSV headers, combines duplicate SKU rows, normalizes SKUs, and atomically increments stock. Unknown/inactive SKUs, invalid quantities, duplicate invoices, or stock limits roll back the entire file. Adapt vendor-specific exports to this documented format before uploading.
-3. **POS checkout** — [UI](src/app/pos/page.tsx), [API](src/app/api/checkout/route.ts), [service](src/lib/checkout.ts). POST receives product IDs/quantities and CASH or STRIPE. The server uses conditional UPDATE statements inside a Prisma database transaction to reserve available stock, reads authoritative prices, and creates the sale and lines. Row locks are taken in sorted product order. An advisory transaction lock serializes retries with the same idempotency key, and a changed request with a reused key is rejected. The browser saves the request before sending it.
-4. **Stripe link and QR** — [service](src/lib/stripe.ts), [payment recovery API](src/app/api/payments/route.ts), [webhook](src/app/api/stripe/webhook/route.ts). A single-use Stripe Checkout Session supplies the payment URL rendered as a QR code. This intentionally uses the Checkout Sessions API rather than reusable Stripe Payment Links, so the same reserved cart cannot be purchased multiple times. Signature verification uses the untouched raw request body. Paid webhooks validate sale ID, session, currency, and amount before marking COMPLETE; expiry restores reserved stock once.
-5. **Daily conciliation** — [UI](src/app/reports/page.tsx), [API](src/app/api/reports/daily/route.ts), [query service](src/lib/reports.ts), [standalone SQL](sql/daily-conciliation.sql). GET /api/reports/daily?date=YYYY-MM-DD groups completed sales by CASH/STRIPE and currency, using local midnight boundaries in SHOP_TIMEZONE. Completion time, rather than cart creation time, determines the business date.
-
-### Checkout request example
-
-```json
-{
-  "idempotency_key": "11111111-1111-4111-8111-111111111111",
-  "payment_method": "STRIPE",
-  "items": [
-    { "product_id": "22222222-2222-4222-8222-222222222222", "quantity": 1 }
-  ]
-}
-```
-
-Use a real product UUID and a fresh UUID for each new sale. Repeat the same body and key on ambiguous network failures. Never make a new sale to retry payment setup for an existing reservation.
-
-### Stripe local setup
+Use Node 22.12+ or Node 24 and the pinned pnpm version.
 
 ```powershell
-stripe login
-stripe listen --events checkout.session.completed,checkout.session.expired --forward-to localhost:3000/api/stripe/webhook
-# Copy the displayed whsec_ value into STRIPE_WEBHOOK_SECRET in .env and restart Next.js.
+pnpm install --frozen-lockfile
+# For a new clone, copy .env.example to .env and configure credentials.
+# This workspace already has an ignored .env connected to Neon's development branch.
+pnpm db:generate
+pnpm db:deploy
+pnpm dev
 ```
 
-Set STRIPE_SECRET_KEY to a test-mode secret key. Use a real test checkout created by the POS to exercise the webhook: generic Stripe CLI fixtures do not carry the application's transaction ID and amounts. Use Stripe's documented test card 4242 4242 4242 4242 with a future expiry and any three-digit CVC in test mode only.
+Open `/store` for the public shop or `/pos` for staff checkout. Local staff credentials are in the ignored `.env`; they are not committed or displayed in logs.
 
-For deployment, configure an HTTPS endpoint at /api/stripe/webhook with the same two event types and the endpoint's own signing secret. APP_URL must be the public HTTPS origin. The webhook authenticates by Stripe signature; other staff screens and APIs require the credentials in POS_USERNAME/POS_PASSWORD.
+## Modules
 
-A failed Stripe request returns the existing reserved sale and recovery instructions; stock is not blindly restored because Stripe may already have created a payable session. Retry setup uses the same Stripe idempotency key and fixed expiry. Setup retries stop when fewer than 30 minutes remain. Pending payments remain visible after refresh. **Check payment status** retrieves the authoritative session; it can recover an unrecorded session ID or release an orphan only after the fixed expiry plus five minutes and a successful Stripe session lookup. No background sweep is scheduled by this starter. Configure an authenticated operational job or use the pending-payment screen to recover missed expiry webhooks. Very old completions without an available Stripe event timestamp require manual review.
+| Route | Function |
+| --- | --- |
+| `/store` | In-stock equipment, category-specific filters, cart, PayPal and MercadoPago SDK checkout |
+| `/pos` | USB/camera scanning, products and services, customer assignment, cash/card recording, existing Stripe links |
+| `/inventory` | Product creation/editing, stock thresholds, archive |
+| `/receiving` | Idempotent barcode receiving, variant attributes, low-stock list, supplier reorder CSV |
+| `/services` | Service pricing, labor add-ons, fixed-price service bundles |
+| `/customers` | Contacts, notes and append-only fitting/spec history |
+| `/proposals` | Draft packages, public approval links, deposits, fulfillment and tracking |
+| `/proposal/[token]` | Customer approval and automatically refreshed shop progress |
+| `/receipt/[token]` | Branded printable purchase note and WhatsApp/email sharing |
+| `/invoices` | Existing supplier CSV import |
+| `/reports` | Completed sales by payment method and business date |
 
-Cashiers should confirm the server-returned total and payment status before releasing goods. Discard a saved checkout request only after confirming it failed or reviewing the resulting sale; an ambiguous cash request may already have completed.
+Staff can send branded receipt/proposal emails after configuring Resend. Email drafts and WhatsApp share links also work without an email service.
 
-## ProDrillOS branding
+## Schema and branding
 
-The branding was verified visually and through rendered styles on [ProDrillOS.com](https://prodrillos.com/) on September 6, 2026. The original cube logo is included in public/brand/prodrillos-logo.png. The starter uses the official cyan (#38bdf8), navy background (#0b0f19), and gray text (#e5e7eb), with complementary dark surfaces. Body typography remains a readable system font for dense POS tables.
+The additive SQL migration is `prisma/migrations/20261014000000_commerce/migration.sql`; the complete schema is `prisma/schema.prisma`. Existing Product and Transaction table names and historical categories are retained. Products use `name` for title, `cost` for cost price, and `low_stock_threshold` for the minimum-stock threshold. Monetary values are integer cents. Each sellable variant has its own SKU/barcode and stock row.
 
-- NEXT_PUBLIC_BRAND_LOGO defaults to the included official logo; change it when replacing the brand asset.
-- Brand tokens live in src/app/globals.css: --brand, --brand-ink, --canvas, --surface, --border, --text, and --muted.
-- Configure SHOP_CURRENCY and NEXT_PUBLIC_SHOP_CURRENCY consistently before the first sale. This starter assumes a single shop and a two-decimal currency (USD, MXN, CAD, EUR, GBP).
+The schema adds bowling-ball/shoe/bag details, service bundles, customers and spec history, proposal events, receiving movements, and payment/receipt references. SQL CHECK constraints guard nonnegative stock, valid amounts, and exactly one product or service per sale line. Receipt tokens are backfilled for existing sales.
 
-## File structure
-
-```text
-prisma/
-  schema.prisma
-  migrations/20260906000000_init/migration.sql
-src/
-  app/
-    inventory/page.tsx
-    invoices/page.tsx
-    pos/page.tsx
-    reports/page.tsx
-    payment-return/page.tsx
-    api/
-      products/route.ts
-      invoices/route.ts
-      checkout/route.ts
-      payments/route.ts
-      stripe/webhook/route.ts
-      reports/daily/route.ts
-    layout.tsx
-    globals.css
-    page.tsx
-  components/nav.tsx
-  lib/
-    db.ts
-    http.ts
-    validation.ts
-    invoices.ts
-    checkout.ts
-    stripe.ts
-    reports.ts
-    client.ts
-  proxy.ts
-sql/daily-conciliation.sql
-examples/invoice.csv
-tests/validation.test.ts
-tests/database.test.ts
-compose.yaml
-prisma.config.ts
-.env.example
-```
+Shared branding: `src/lib/brand.ts`, `src/app/globals.css`, and the official `public/brand/prodrillos-logo.png` asset retained from the prior verified starter.
 
 ## Verification
 
 ```powershell
-npx prisma validate
-npx prisma generate
-npm run typecheck
-npm test
-npm run build
-
-# Integration tests MUST target a separate disposable PostgreSQL database.
-# Apply the migration to that database first, then:
-$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/prodrillos_test"
-npm test
+pnpm typecheck
+pnpm test
+pnpm build
+# With TEST_DATABASE_URL set to a disposable, migrated database:
+pnpm test
+# With a running server on the same disposable database:
+$env:TEST_API_BASE = 'http://localhost:3000'
+pnpm exec tsx --test tests/api-flow.test.ts
+# On Linux / CI:
+pnpm build:cloudflare
 ```
 
-The database integration suite is skipped when TEST_DATABASE_URL is absent. It checks concurrent stock contention, rollback of a partially reserved cart, idempotent retry behavior, PostgreSQL constraints, and repeat webhook handling.
+Tests cover migration of an existing sale, constraints, concurrent inventory contention, checkout retries and rollback, services/customer assignment, provider settlement validation, signature checks, access boundaries, barcode receiving, receipt privacy, and idempotent proposal approval. Database tests skip without TEST_DATABASE_URL; HTTP tests skip without TEST_API_BASE. The HTTP test creates and removes only its own test records.
 
-This is a functional single-shop starter, not the full ProDrillOS production platform. Staff protection uses HTTP Basic Auth and must run over HTTPS; replace it with ProDrillOS session auth and roles when integrating. Configure reverse-proxy upload limits (about 2 MB plus multipart overhead) and rate limits. Audit logs for staff mutations, returns/refunds, sales tax, discounts, cash drawer balancing, Stripe fee/payout matching, multi-location inventory, automated expiry recovery, and multi-tenant isolation are not implemented. The daily report is gross sales, not a bank/payout reconciliation.
-
-References: [Next.js installation](https://nextjs.org/docs/app/getting-started/installation), [Prisma 7 configuration](https://docs.prisma.io/docs/orm/reference/prisma-config-reference), [Stripe Checkout Sessions](https://docs.stripe.com/api/checkout/sessions/create), [Stripe fulfillment/webhooks](https://docs.stripe.com/checkout/fulfillment).
+See [the development plan](docs/DEVELOPMENT.md) and [deployment configuration, account setup and remaining launch requirements](docs/DEPLOYMENT.md). Provider sandbox tests and a real Cloudflare deployment are required before live sales. The earlier starter documentation is retained in `docs/LEGACY-STARTER.md` for the existing Stripe/import behavior.

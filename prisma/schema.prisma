@@ -8,6 +8,10 @@ datasource db {
 }
 
 enum ProductCategory {
+  BOWLING_BALLS
+  SHOES
+  BAGS
+  ACCESSORIES
   REACTIVE_RESIN
   URETHANE
   GRIPS
@@ -18,6 +22,9 @@ enum ProductCategory {
 enum PaymentMethod {
   CASH
   STRIPE
+  POS_CARD
+  PAYPAL
+  MERCADOPAGO
 }
 
 enum TransactionStatus {
@@ -43,6 +50,15 @@ model Product {
   active              Boolean         @default(true)
   version             Int             @default(0)
   items               TransactionItem[]
+  barcode             String? @unique @db.VarChar(100)
+  brand               String? @db.VarChar(100)
+  model               String? @db.VarChar(100)
+  supplier            String? @db.VarChar(100)
+  created_at          DateTime @default(now()) @db.Timestamptz(3)
+  ball                BowlingBallDetails?
+  shoe                ShoeDetails?
+  bag                 BagDetails?
+  movements           StockMovement[]
 }
 
 model Transaction {
@@ -59,6 +75,11 @@ model Transaction {
   payment_url       String?
   expires_at        DateTime?         @db.Timestamptz(3)
   items             TransactionItem[]
+  customer_id       String? @db.Uuid
+  customer          Customer? @relation(fields: [customer_id], references: [id], onDelete: Restrict)
+  receipt_token     String @unique @default(uuid()) @db.Uuid
+  provider_id       String? @unique
+  provider_payment_id String? @unique
 
   @@index([status, completed_at, payment_method])
 }
@@ -66,15 +87,140 @@ model Transaction {
 model TransactionItem {
   id             String      @id @default(uuid()) @db.Uuid
   transaction_id String      @db.Uuid
-  product_id     String      @db.Uuid
+  product_id     String?     @db.Uuid
+  service_id     String?     @db.Uuid
   quantity       Int
   price_at_sale  Int
   name_at_sale   String
   transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Restrict)
-  product        Product     @relation(fields: [product_id], references: [id], onDelete: Restrict)
+  product        Product?    @relation(fields: [product_id], references: [id], onDelete: Restrict)
+  service        Service?    @relation(fields: [service_id], references: [id], onDelete: Restrict)
 
   @@unique([transaction_id, product_id])
   @@index([product_id])
+  @@unique([transaction_id, service_id])
+}
+
+enum OilCategory {
+  Heavy
+  Medium
+  Light
+}
+enum RGCategory {
+  High
+  Medium
+  Low
+}
+enum ShoeTier {
+  Pro
+  Competitive
+  Entry_Level
+}
+enum BagType {
+  Tote
+  Wheeled
+}
+enum ProposalStatus {
+  Draft
+  Sent
+  Approved
+  Deposit_Paid
+  In_Progress
+  Shipped
+  Fulfilled
+}
+model BowlingBallDetails {
+  product_id String @id @db.Uuid
+  weight Int
+  oil_category OilCategory
+  rg_category RGCategory
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+}
+model ShoeDetails {
+  product_id String @id @db.Uuid
+  size String @db.VarChar(20)
+  style String @db.VarChar(60)
+  tier ShoeTier
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+}
+model BagDetails {
+  product_id String @id @db.Uuid
+  ball_capacity Int
+  bag_type BagType
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+}
+model Service {
+  id String @id @default(uuid()) @db.Uuid
+  name String @db.VarChar(200)
+  description String @default("") @db.VarChar(2000)
+  price Int
+  active Boolean @default(true)
+  items TransactionItem[]
+  components ServiceBundle[] @relation("Bundle")
+  bundled_in ServiceBundle[] @relation("Component")
+}
+model ServiceBundle {
+  bundle_id String @db.Uuid
+  service_id String @db.Uuid
+  quantity Int @default(1)
+  bundle Service @relation("Bundle", fields: [bundle_id], references: [id], onDelete: Cascade)
+  service Service @relation("Component", fields: [service_id], references: [id], onDelete: Restrict)
+  @@id([bundle_id, service_id])
+}
+model Customer {
+  id String @id @default(uuid()) @db.Uuid
+  full_name String @db.VarChar(200)
+  email String? @db.VarChar(254)
+  phone_whatsapp String? @db.VarChar(20)
+  notes String @default("") @db.VarChar(5000)
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  specs CustomerSpec[]
+  orders Transaction[]
+  proposals Proposal[]
+}
+model CustomerSpec {
+  id String @id @default(uuid()) @db.Uuid
+  customer_id String @db.Uuid
+  notes String @db.VarChar(5000)
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Restrict)
+  @@index([customer_id, created_at])
+}
+model Proposal {
+  id String @id @default(uuid()) @db.Uuid
+  customer_id String @db.Uuid
+  title String @db.VarChar(200)
+  description String @db.VarChar(5000)
+  total_amount Int
+  deposit_amount Int
+  currency String @db.VarChar(3)
+  status ProposalStatus @default(Draft)
+  approval_token String @unique @default(uuid()) @db.Uuid
+  carrier String? @db.VarChar(60)
+  tracking_number String? @db.VarChar(100)
+  deposit_reference String? @db.VarChar(200)
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  updated_at DateTime @updatedAt @db.Timestamptz(3)
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Restrict)
+  events ProposalEvent[]
+  @@index([customer_id, status])
+}
+model ProposalEvent {
+  id String @id @default(uuid()) @db.Uuid
+  proposal_id String @db.Uuid
+  status ProposalStatus
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  proposal Proposal @relation(fields: [proposal_id], references: [id], onDelete: Restrict)
+  @@index([proposal_id, created_at])
+}
+model StockMovement {
+  id String @id @default(uuid()) @db.Uuid
+  product_id String @db.Uuid
+  quantity Int
+  reference String @db.VarChar(200)
+  request_id String @unique @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  product Product @relation(fields: [product_id], references: [id], onDelete: Restrict)
 }
 
 model InvoiceLog {

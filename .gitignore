@@ -6,3 +6,7 @@ src/generated/
 *.tsbuildinfo
 coverage/
 .pnpm-store/
+.open-next/
+.wrangler/
+.dev.vars*
+artifacts/
