@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
+  outputFileTracingIncludes: {
+    "/*": ["./node_modules/pg-cloudflare/dist/**/*"],
+  },
   poweredByHeader: false,
   async headers() {
     return [

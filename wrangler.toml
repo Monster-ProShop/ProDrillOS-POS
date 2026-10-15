@@ -1,4 +1,5 @@
 name = "prodrillos-pos"
+account_id = "a56a3977dd8f5fae4cb759c7bd3ce3f0"
 main = ".open-next/worker.js"
 compatibility_date = "2026-10-14"
 compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
