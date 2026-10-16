@@ -70,3 +70,5 @@ jobs:
         run: test -n "$DATABASE_URL_UNPOOLED" && test -n "$CLOUDFLARE_API_TOKEN" && test -n "$CLOUDFLARE_ACCOUNT_ID"
       - run: pnpm db:deploy
       - run: pnpm exec opennextjs-cloudflare deploy
+      - name: Verify live storefront, database, and staff protection
+        run: node scripts/check-deployment.mjs

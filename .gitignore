@@ -10,3 +10,4 @@ coverage/
 .wrangler/
 .dev.vars*
 artifacts/
+.cloudflare.prisma
